@@ -1,0 +1,512 @@
+; Fernando Luna Marcuello, b190394
+; Borja Pérez-Villacastín Palacín, b190395
+
+LEA: MACRO (reg, ETIQ)
+     or reg, r0,low(ETIQ)
+     or.u reg, reg, high(ETIQ)
+     ENDMACRO
+
+LOAD: MACRO (reg, ETIQ)
+      LEA (reg, ETIQ)
+      ld reg,reg,r0
+      ENDMACRO
+                
+PUSH: MACRO (ra)
+      subu r30, r30,4
+      st ra,r30,r0
+      ENDMACRO
+	  
+POP: MACRO(ra)
+     ld ra, r30, 0
+     addu r30, r30, 4
+     ENDMACRO
+	 
+org 0x100
+texto: 		data "tres tristes tigres comen trigo en un trigal, el primer tigre que...\0"
+org 0x188
+comprdo: 	data 0
+org 0x200
+descom: 	data 0
+org 0x300
+long1: 	data 00
+long2: 	data 00
+	 
+org 0x400
+PPALC:		LEA(r30,0x14FF8)
+			or r31,r30,r30
+			LEA(r20,comprdo)
+			PUSH(r20)
+			LEA(r21,texto)
+			PUSH(r21)
+			bsr Comprime
+			or r18,r29,r0
+			POP(r21)
+			POP(r20)
+			LEA(r20,descom)
+			PUSH(r20)
+			LEA(r21,comprdo)
+			PUSH(r21)
+			bsr Descomprime
+			POP(r21)
+			POP(r20)
+			stop
+
+		
+PPALV:		LEA(r30,0x14FF8)
+			or r31,r30,r30
+			LEA(r20,long2)
+			PUSH(r20)
+			LEA(r21,long1)
+			PUSH(r21)
+			LEA(r22,texto)
+			PUSH(r22)
+			bsr Verifica
+			POP(r21)
+			POP(r21)
+			POP(r20)
+			stop
+			
+
+
+LongCad:		ld r20,r30,r0         ;Cargamos direccion cadena UTILIZA R20, R3 Y R4
+				or r3,r0,r0           ;Limpiamos r3
+				or r29,r0,r0          ;Ponemos r29 a 0 para utilizarlo como contador
+	blc:		ld.b r3,r20,r29       ;Cargamos caracter en r3 utilizando r29 como desplazamiento
+				cmp r4,r3,r0          ;Comparamos para ver si caracter nulo
+				bb1 eq,r4, flc        ;Si el caracter es nulo saltamos a final longcad
+				add r29,r29,1         ;Sumamos 1 porque hemos leido caracter
+				br blc                ;Saltamos bucle longcad
+	flc:		jmp (r1)              ;Retorno de subrutina
+
+
+
+BuscaCar:		or r3,r0,r0           ;Limpiamos r3
+				ld.b r3,r30,0         ;Cargamos Byte (caracter) a buscar en r3
+				ld r20,r30,4          ;Cargamos dir cadena (ref) en r20 
+				ld r29,r30,8          ;Cargamos posicion inicio (from) en r29
+				ld r2,r30,12          ;Cargamos posicion final(to) en r2	
+	bbc:		cmp r7,r29,r2         ;Comparamos la posicion con to
+				bb0 lt,r7,fbc         ;Saltamos a fin buscacar si r29 ha llegado a to
+				or r4,r0,r0           ;Limpiamos r4
+				ld.b r4,r20,r29       ;r4 <-- ref[r29], r4 tiene el caracter de la cadena en la posicion r29 (from)
+				cmp r7,r4,r3          ;Comparamos con el Byte que buscamos : ¿es el caracter que buscamos?
+				bb1 eq,r7,fbc         ;Si lo hemos encontrado salta al final
+				add r29,r29,1         ;Incrementa r29 para mirar la siguiente posicion
+				br bbc                ;Salto comienzo de bucle
+	fbc:		jmp (r1)              ;Retorno de subrutina
+	
+
+
+CoincidenCad:	ld r21,r30,r0         ;Cargamos dir cadena1 en r21 
+				ld r22,r30,4          ;Cargamos dir cadena2 en r22
+				or r29,r0,r0          ;Limpiamos r29
+				or r2,r0,r0           ;Limpia r2 y r3 para cargar los Bytes
+				or r3,r0,r0
+	bcc:		ld.b r3,r21,r29       ;Carga los bytes de las cadenas 1 y 2 en r3 y r2
+				ld.b r2,r22,r29
+				cmp r4,r3,r0          ;Compara si alguno de los bytes es 0x00 y en tal caso salta al final
+				bb1 eq,r4,fcc
+				cmp r4,r2,r0
+				bb1 eq,r4,fcc
+				cmp r4,r2,r3          ;Compara los dos bytes y en caso de no ser iguales salta al final
+				bb1 ne,r4,fcc
+				add r29,r29,1         ;Si son iguales suma 1 al contador en r29
+				br bcc                ;Salto a comienzo de bucle CoincidenCad
+	fcc:		jmp (r1)
+				
+
+
+Comprime:		PUSH(r1)              ; (1. y 3.)
+				PUSH(r31)
+				or r31,r30,r0         ;Creamos el marco de pila
+				ld r20,r31,8          ; r20 <-- dirTexto
+				ld r21,r31,12         ; r21 <-- dirComprimido
+				PUSH(r20)             ;Metemos dirTexto en pila para LongCad
+				bsr LongCad
+				or r15,r29,r0         ; Me guardo en r15 el tamaño original para utilizarlo luego
+				or r16,r0,r0          ; En r16 vamos a contar cada vez que se mueva el puntero de la pila para saber al final 
+									  ; cuantos caracteres tiene el texto comprimido (tamañoComprimido)
+				POP(r20)              ; Recuperamos dirTexto  (2.)
+				bb0 0,r29,cmulti      ; Hacemos que el tamano sea multiplo de cuatro comprobando sus dos ultimos bits
+				add r29,r29,1         ; se suma 1, 2 o 3 a r29 dependiendo de sus bits para hacerlo multiplo de 4
+	cmulti:		bb0 1,r29,multi
+				add r29,r29,2
+	multi:		sub r30,r30,r29       ; Reservamos espacio en pila
+	
+				sub r22,r31,1         ; r22 <-- ptrPila (r31-1)      (4.)
+				add r2,r0,8           ; r2= 8*M 
+	bcopicar:	cmp r7,r2,r0          ; Bucle en el que se copian los 8*M primeros caracteres a la pila
+				bb1 eq,r7,fcopicar
+				ld.b r3,r20,r0        ; Cargamos caracter en r3
+				st.b r3,r22,r0        ; Metemos caracter en la pila
+				sub r22,r22,1         ; Decrementamos ptrPila
+				add r16,r16,1         ; Incrementamos contador caracteres
+				add r20,r20,1         ; Incrementamos ptrTexto
+				sub r2,r2,1           ; Decrementamos contador 8*M
+				br bcopicar           ; Volvemos al comienzo del bucle de copiar caracteres
+
+	fcopicar:	add r2,r0,7            ; bitsMBits = 7   (5.)
+				add r23,r21,5          ; dirMBits = dirComprimido +5
+				or r3,r0,r0            ; bytesMBits = 0
+				or r4,r0,r0            ; byte = 00000000
+				or r5,r0,r0            ; Limpiamos r5 por si quedase algo en la parte suerior
+				add r6,r0,128          ; bit 7 a 1 en el registro r6 (iremos rotando el registro para que este acorde al bit de Mapa de Bits)
+	bcomp:		ld.b r5,r20,r0         ; r5 <-- (ptrTexto)
+				cmp r7,r5,r0           ; (ptrTexto)!=0
+				bb1 eq,r7,fbcomp       ; Salta final bucle
+				PUSH(r23)              ; Guardamos registros que necesitamos por si los utiliza BuscaMax o las subrutinas que llame
+				PUSH(r22)
+				PUSH(r21)
+				PUSH(r20)
+				PUSH(r2)
+				PUSH(r3)
+                PUSH(r4)
+                PUSH(r5)
+                PUSH(r6)
+                subu r24,r30,4         ; Reserva espacio para P en pila
+				PUSH(r0)
+                PUSH(r24)              ; Guarda dir de P
+                ld r24,r31,8           ; r24 <-- dirTexto
+                sub r20,r20,r24        ; Calculo el desplazamiento en el texto
+                PUSH(r20)              ; Guarda desplazamiento Texto
+                PUSH(r24)              ; Guarda dir Texto
+                bsr BuscaMax           ; Llamamos a BuscaMax
+                POP(r0)
+                POP(r0)
+                POP(r0)               
+				POP(r24)				; Conseguimos P
+                POP(r6)                 ; Recuperamos los registros que habiamos guardado
+                POP(r5)
+                POP(r4)
+                POP(r3)
+                POP(r2)
+				POP(r20)
+				POP(r21)
+				POP(r22)
+				POP(r23)
+				cmp r7,r29,4           ; Comparamos r29 para ver si el resultado de BuscaMax>=4
+				bb1 ge,r7,gt4          ; Si el retorno de BuscaMax no es mayor o igual a 4, 
+				st.b r5,r22,r0         ; copiamos el bit en la pila, incrementamos punteros y r16 
+				sub r22,r22,1
+				add r16,r16,1
+				add r20,r20,1
+				br fcgt4
+	gt4:        or r5,r24,r0           ; Si el retorno de BuscaMax es mayor o igual a 4, 
+				st.b r5,r22,r0         ; guarda primer byte P en la pila
+				sub r22,r22,1          ; Mueve ptrPila
+				add r16,r16,1
+				rot r10,r5,<8>         ; Rotamos 1 byte entero de r5 para conseguir el segundo byte de P
+				st.b r10,r22,r0        ; y guardamos el segundo byte en la pila                 
+				sub r22,r22,1          ; Mueve ptrPila
+				add r16,r16,1
+				or r5,r5,r0
+				st.b r29,r22,r0        ; Mete L en ptrPila
+				sub r22,r22,1          ; Mueve ptrPila
+				add r16,r16,1
+				add r20,r20,r29        ; ptrTexto+L
+				or r4,r4,r6            ; pone a 1 su bit correspondiente en el byte que ira al Mapa de Bits
+	fcgt4:		rot r6,r6,<1>          ; rota el bit que tenemos a 1 en r6 
+				sub r2,r2,1            ; Decrementa el indice del bit
+				cmp r7,r2,-1           ; Si r2 ha llegado a -1 lo volvemos a colocar a 7 y r6 a 128 (10000000) 
+				bb0 eq,r7, bcomp       ; Si no ha llegado a -1 saltamos al comienzo de bucle
+				st.b r4,r23,r3         ; Hemos completado un byte del mapa de bits, guardamos el byte en el mapa de bits
+				or r4,r0,r0            ; y lo ponemos a 0 de nuevo para comenzar otro byte
+				add r2,r0,7           
+				add r6,r0,128
+				add r3,r3,1            ; Incrementamos el numero de bytes en el Mapa de Bits
+				br bcomp
+	
+	fbcomp:     add r5,r15,r0          ; Ponemos en r5 el tamaño original (7. y 8.) 
+                st.b r5,r21,r0         ; Guardamos el primer byte en cabecera[0]
+                rot r10,r5,<8>         ; Rotamnos r5 para acceder al segundo byte
+                st.b r10,r21,1         ; Guardamos el segundo byte en cabecera[1]
+                add r6,r0,1
+                st.b r6,r21,2          ; Guardamos M en cabecera[2]
+				
+				cmp r7,r2,7            ; Si hemos dejado un byte del mapa de bits a medias lo guaramos (6.)
+				bb1 eq,r7,nocopia       
+				st.b r4,r23,r3
+				add r3,r3,1
+				
+	nocopia:    add r3,r3,5            ; Añade 5 bytes junto con el numero de bytes del mapa de bits (9.)
+                st.b r3,r21,3          ; Guarda el primer bytes de la posicion de comienzo en cabecera[3]
+                rot r10,r3,<8>         ; Rotamos el registro para acceder al segundo byte
+                st.b r10,r21,4         ; Guarda el segundo byte de la posicion en cabecera[4]
+				add r21,r21,r3         ; Dejamos r21 apuntando a la posicion de comienzo del texto comprimido
+				
+				or r22,r31,r0          ; r22 <-- ptrPila       (10.)
+				sub r22,r22,1          ; ptrPila = r31-1
+				or r4,r0,r0            ; Limpiamos r4 por si tiene algo en la parte superior
+				add r29,r16,r3         ; r29 = tamañoComprimido + comienzoComprimido (tamaño total comprimido)
+	ccoppila:	cmp r7,r16,r0          ; Copiamos de la pila a comprdo utilizando el contador de r16
+				bb1 eq,r7,fincomp
+				ld.b r4,r22,r0         ; Cargamos byte de la pila
+				st.b r4,r21,r0         ; Metemos byte en comprimido
+				sub r22,r22,1          ; Decrementamos ptrPila 
+				add r21,r21,1          ; Incrementamos ptrTexto
+				sub r16,r16,1          ; Decrementamos numero de caracteres que eudan por copiar
+				br ccoppila
+				
+	fincomp:	or r30,r31,r0          ; Destruimos marco de pila
+				POP(r31)
+				POP(r1)
+				jmp (r1)
+
+
+
+Descomprime:	ld r20,r30,0            ; r20 <-- ptrCabecera  (1.)
+				add r21,r20,5           ; r21 <-- ptrMBits
+				or r2,r0,r0             ; Limpiamos r2
+				ld.b r2,r20,4           ; r2 <-- PosComienzo (Primer byte)
+				mulu r2,r2,8            ; Rotamos a la izquierda 8 posiciones r2
+				ld.b r2,r20,3           ; r2 <-- PosComienzo (Segundo byte)
+				add r22,r20,r2          ; r22 <-- ptrCom
+				ld r23,r30,4            ; r23 <-- ptrDesc
+				add r2,r0,7             ; r2 = bitMBits
+				add r3,r0,128           ; r3 = bitActivado
+				or r4,r0,r0             ; r4 = tamDesc
+				or r5,r0,r0
+				
+				ld.b r5,r20,2           ; r5 = M   (2.)
+				mulu r5,r5,8            ; r5 = M*8
+	dbcog:		cmp r7,r5,r0            ; Si r5 ==0 fin de bucle copiar originales
+				bb1 eq,r7,dfcog
+				ld.b r6,r22,r0          ; Carga caracter y lo mete en desc
+				add r22,r22,1
+				st.b r6,r23,r4
+				add r4,r4,1             ; Incrementamos tamDesc
+				sub r5,r5,1             ; Decrementamos el numero de bytes por copiar
+				br dbcog
+				
+	dfcog:		or r6,r0,r0              ;  (3.)
+				or r5,r0,r0              ; Limpiamos r6 y r5
+				ld.bu r5,r21,r0          ; r5 = byte MapaBits
+	bucdesc:	ld.b r6,r22,r0           ; r6 = caracter
+				cmp r7,r6,r0             ; Si caracter == 0x00 salta a fin de bucle descomprimir
+				bb0 eq,r7,cbdesc
+				and r7,r5,r3             ; byteMB AND bitActivado
+				cmp r7,r7,r0             ; Si el and!=0 sustitimos, sino metemos el caracter directo 
+				bb0 eq,r7,susti
+				bb1 eq,r7,fbucdesc
+				
+	cbdesc:		and r7,r5,r3             ; byteMB AND bitActivado
+				cmp r7,r7,r0             ; Si el and!=0 sustitimos, sino metemos el caracter directo 
+				bb0 eq,r7,susti
+				st.b r6,r23,r4
+				add r22,r22,1            ; Incrementamos ptrCom
+				add r4,r4,1              ; Incrementamos tamDesc
+				br cont                 
+	susti:		or r8,r0,r0              ; Limpiamos r8    
+				ld.b r8,r22,1            ; r8 <-- P  (Primer byte)
+				mulu r8,r8,8             ; Rotamos a la izquierda 8 posiciones r8
+				ld.b r8,r22,r0           ; r8 <-- P  (Segundo byte)
+				or r9,r0,r0              ; Limpiamos r9
+				ld.b r9,r22,2            ; r9 <-- L
+	bsusti:		cmp r7,r9,r0             ; while(L!=0)
+				bb1 eq,r7,fbsusti
+				ld.b r6,r23,r8           ; (ptrDesc+P) --> (ptrDesc+tamDesc)
+				st.b r6,r23,r4
+				add r8,r8,1              ; Incrementamos P, tamDesc y decrementamos L
+				add r4,r4,1
+				sub r9,r9,1
+				br bsusti
+	fbsusti:	add r22,r22,3            ; ptrCom = ptrCom + 3
+	cont:		sub r2,r2,1              ; bitMBits--
+				rot r3,r3,<1>            ; bitActivado= bitActivado/2
+				cmp r7,r2,-1             ; if(bitMBits==-1)
+				bb0 eq,r7, bnolleno
+				add r2,r0,7              ; bitMBits=7
+				add r3,r0,128            ; bitActivado= 128
+				add r21,r21,1            ; ptrMBits++
+				ld.b r5,r21,r0           ; byte = (ptrMBits)
+	bnolleno:	br bucdesc
+				
+	fbucdesc:	or r6,r0,r0              ; (4.) Añade terminador 0x00
+				st.b r6,r23,r4
+				
+				or r29,r4,r0             ; (5.) Devuelve longitud texto descomprimido en r29
+				jmp (r1)
+
+
+
+Verifica:		PUSH(r1)
+				PUSH(r31)                ; Creamos marco de pila
+				or r31,r30,r0
+				ld r20,r31,8             ; r20 <-- dirTexto
+				PUSH(r20)
+				bsr LongCad              ; LLamamos a LongCad para tener el tamaño
+				POP(r20)
+				ld r2,r31,12             ; Cargamos dir Long1
+				st r29,r2,0              ; Guardamos tamaño en long1
+				or r18,r29,r29           ; Guardamos tamaño en r18
+				bb0 0,r29,ajuste4        ; Hacemos que el tamano sea multiplo de cuatro comprobando sus dos ultimos bits
+				add r29,r29,1            ; se suma 1, 2 o 3 a r29 dependiendo de sus bits para hacerlo multiplo de 4
+	ajuste4:	bb0 1,r29,fajuste4
+				add r29,r29,2
+	fajuste4:	or r17,r29,r29
+				bb0 2,r29,fajuste8       ; Vamos a ajustarlo a multiplo de 8, para reservar espacio para el mapa de bits
+				add r29,r29,4
+	fajuste8:	divu r29,r29,8
+				add r29,r29,r18
+				or r18,r17,r0
+				add r29,r29,5            ; Tambien reservaremos espacio para la cabecera
+				bb0 0,r29,reaj4          ; Hacemos que el tamano sea multiplo de cuatro comprobando sus dos ultimos bits
+				add r29,r29,1            ; se suma 1, 2 o 3 a r29 dependiendo de sus bits para hacerlo multiplo de 4
+	reaj4:		bb0 1,r29,freaj4
+				add r29,r29,2
+	freaj4:		add r29,r29,4
+				sub r30,r30,r29          ; Movemos el puntero d epila para reservar el espacio
+				or r21,r30,r0
+				PUSH(r21)
+				PUSH(r20)
+				bsr Comprime             ; LLamamos a Comprime
+				POP(r20)
+				POP(r21)
+				add r18,r18,4
+				sub r30,r30,r18          ; Reservamos espacio en pila
+				or r28,r30,r0            ; r28 = r30
+				PUSH(r28)
+				PUSH(r21)
+				bsr Descomprime          ; LLamamos a Descomprime
+				POP(r21)
+				POP(r28)
+				or r30,r28,r0            ; r30 = r28
+				ld r2,r31,16             ; Cargamos dir long2
+				st r29,r2,0              ; Guardamos r29 en long2
+				ld r3,r31,12             ; Cargamos dir long1
+				ld r8,r3,r0              ; Cargamos long1
+				cmp r7,r8,r29            ; Comparamos long1 y long2
+				bb1 ne,r7,longmal        ; Si no son iguales saltamos a longmal
+				ld r20,r31,8             ; r20 <-- dirTexto
+				or r28,r30,r0            ; r28 = r30
+				PUSH(r28)
+				PUSH(r20)
+				bsr CoincidenCad         ; LLamamos a CoincidenCad
+				POP(r20) 
+				POP(r28)
+				or r30,r28,r0            ; r30 = r28
+				cmp r7,r29,r8            ; Comparamos la longitud que coinciden las cadenas con long
+				bb1 ne,r7,ccmal          ; Si no son iguales saltamos ccmal
+				or r29,r0,r0             ; Ponemos r29 a 0
+				br fver                  ; Saltamos final verifica
+	longmal:	sub r29,r0,1             ; Ponemos r29 a -1
+				br fver
+	ccmal:		sub r29,r0,2             ; Ponemso r29 a -2
+				br fver
+				
+	fver:		or r30,r31,r0             ; Destruimos marco de pila
+				POP(r31)
+				POP(r1)
+				jmp (r1)
+
+
+
+
+
+
+
+
+
+
+;
+; Debe incorporar este fichero con TODAS sus líneas, sin modificar
+; ninguna de ellas, al final de su archivo CDV24.ens
+;
+; Este aviso se refiere también a las líneas de comentario
+; 
+;
+;; Grupo:    b190394 - Fri May 31 11:52:34 CEST 2024
+
+BuscaMax:
+	PUSH (r1)
+	PUSH (r31)
+	or   r31, r30, 0
+	or   r28, r0, 0x209D
+	PUSH (r28)
+
+	ld   r10, r31, 8;  REF
+	ld   r11, r31, 12; MAX
+	ld   r12, r31, 16; Dir(JJ)
+
+	sub  r5, r0, 1		; guarda -1 en *JJ por si no se
+	st   r5, r12, 0		; encuentran coincidencias
+
+	addu r27, r0, r0  ; P
+	addu r28, r0, r0  ; L
+
+BucBM:
+	ld.bu r20, r10, r11	; C=REF(max)
+
+				; Reserva registros que
+				; necesita conservar
+	PUSH (r28) 	    	; L
+	PUSH (r11)	    	; MAX
+
+	     		    	; Parámetros de BuscaCar
+	PUSH (r27)	    	; P
+	PUSH (r10)	    	; REF
+	PUSH (r20)	   	; C
+	bsr  BuscaCar
+	POP  (r20)
+	POP  (r10)
+	POP  (r27)
+
+	POP  (r11)		; Recupera registros
+	POP  (r28)	        ; salvaguardados
+
+	cmp  r5, r29, r11	; nuevo P es >= MAX ??
+	bb1  hs, r5, finBM
+	addu r27, r29, r0	; P = nuevo P
+	
+	addu r13, r10, r27	; *REF(P)
+	addu r14, r10, r11 	; *REF(max)	
+
+	PUSH (r11)     		; Reserva registros que
+	PUSH (r10)		; necesita conservar
+	PUSH (r28)
+	PUSH (r27)
+	
+	PUSH (r14)		; Parámetros de CoincidenCad
+	PUSH (r13)
+	bsr  CoincidenCad
+	POP  (r13)
+	POP  (r14)
+	
+	POP  (r27)		; Recupera registros
+	POP  (r28)		; salvaguardados
+	POP  (r10)
+	POP  (r11)
+
+	cmp r5, r29, r28	; Comprueba si longitud > L
+	bb1 le, r5, contBM	; Si no lo es, continúa
+	cmp r5, r29, 255	; Comprueba si longitud > 255
+	bb1 le, r5, noLimBM	; Si no lo es, continúa
+	addu r29, r0, 255	; Si lo es, limita su valor a 255
+	
+noLimBM:
+	addu r28, r29, r0	; actualiza L
+	ld   r12, r31, 16	; Dir(JJ)
+	st   r27, r12, r0	; actualiza P en *JJ
+	bb1 ge, r5, finBM	; Si coincidencia >= 255 termina
+contBM: 
+	addu r27, r27, 1	; Pasa al siguiente carácter
+	cmp  r5, r27, r11	; Es P>=max ?
+	bb1  hs, r5, finBM
+	
+	br   BucBM   		; Nueva búsqueda del primer carácter
+
+finBM:
+	addu r29, r28, r0	; asigna L al valor de retorno r29
+	  
+	or   r27, r0, 0x5A5
+	POP  (r28)
+
+	or   r30, r31, 0
+	POP  (r31)
+	POP  (r1)
+	jmp  (r1)
+;; Grupo:    b190394
+
+
+
+

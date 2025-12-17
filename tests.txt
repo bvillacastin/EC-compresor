@@ -1,0 +1,117 @@
+------------------------------------P1LongCad-------------------------------------------------------
+	org 0x8000
+cadena: 	data	"\0"
+			
+	org 0x8400
+ppal: 		LEA(r30,0x0F000)
+			or r31,r30,r30
+			LEA(r2,cadena)
+			PUSH(r2)
+			bsr LongCad
+			POP(r0)
+			stop
+	
+------------------------------------P2LongCad-------------------------------------------------------
+	org 0x8000
+cadena: 	data	"0123456789\0"
+			
+	org 0x8400
+ppal: 		LEA(r30,0x0F000)
+			or r31,r30,r30
+			LEA(r2,cadena)
+			PUSH(r2)
+			bsr LongCad
+			POP(r0)
+			stop
+	
+------------------------------------P2LongCad-------------------------------------------------------
+	org 0x8000
+cadena: 	data	"holaqtalfernandoluna"
+			
+	org 0x8400
+ppal: 		LEA(r30,0x0F000)
+			or r31,r30,r30
+			LEA(r2,cadena)
+			PUSH(r2)
+			bsr LongCad
+			POP(r0)
+			stop
+			
+------------------------------------P2LongCad-------------------------------------------------------
+	org 0x8000
+cadena: 	data	"holaqtalfernandoluna"
+			
+	org 0x8400
+ppal: 		LEA(r30,0x0F000)
+			or r31,r30,r30
+			LEA(r2,cadena)
+			PUSH(r2)
+			bsr LongCad
+			POP(r0)
+			stop
+
+
+
+; ;---------PRUEBAS---------;
+; ;----------DATOS----------;
+        org 0x100
+; texto:    data "tres tristes tigres comen trigo en un trigal, el primer tigre que...\0"
+C:        data "A"
+REF:    data "12345678A\0"
+REF2:    data "AAAABBBBCCCCDDDDEEEE_Fin.__.\0"
+from:   data 0
+to:        data 9
+; max:    data 0x1A
+R30:    data 0
+
+        org 0x400
+; ;------PROGRAMA PPAL------;
+;         ;Pruebas LongCad
+PPALLC:    LEA(r30, R30)
+        or r31,r30,r30
+        LEA(r10,REF2)
+        PUSH(r10)
+        bsr LongCad
+        POP(r10)
+        stop
+
+;         ;Pruebas BuscaCar
+PPALBC:    LEA(r30, R30)
+        or r31,r30,r30
+        LOAD(r24, to) ;to
+        PUSH(r24)
+        LOAD(r25, from) ;from
+        PUSH(r25)
+        LEA(r26, REF) ;ref
+        PUSH(r26)
+        LOAD(r27, C) ;C
+        PUSH(r27)
+        bsr BuscaCar
+        POP(r26)
+        POP(r25)
+        POP(r24)
+        POP(r23)
+        stop
+
+        ;Pruebas CoincidenCad
+PPALCC:    LEA(r30, R30)
+        LEA(r10,REF2) ;cadena2
+        PUSH(r10)
+        LEA(r11,REF) ;cadena1
+        PUSH(r11)
+        bsr CoincidenCad
+        POP(r10)
+        POP(r11)
+        stop
+
+
+
+
+
+			
+
+
+
+
+
+
